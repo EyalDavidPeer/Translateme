@@ -1,0 +1,23 @@
+1
+00:00:01,000 --> 00:00:04,000
+Hello, and welcome to
+our presentation today.
+
+2
+00:00:05,500 --> 00:00:08,000
+We're going to discuss
+subtitle localization.
+
+3
+00:00:09,000 --> 00:00:12,500
+This is a very important topic
+for streaming platforms.
+
+4
+00:00:13,000 --> 00:00:15,000
+Let's get started!
+
+5
+00:00:16,000 --> 00:00:20,000
+First, we need to understand the basics
+of how subtitles work across languages.

@@ -1,0 +1,62 @@
+TRANSLATION RESULTS (First 10 subtitles):
+================================================================================
+
+#1
+  ORIGINAL:   Welcome to the Auto Subtitle
+Localization Platform demo.
+  TRANSLATED: [HE] Welcome to the Auto Subtitle
+Localization Pla...
+
+#2
+  ORIGINAL:   This system automatically translates
+subtitles while preserving timing.
+  TRANSLATED: [HE] This system automatically translates
+...
+
+#3
+  ORIGINAL:   It enforces reading speed limits
+and line length constraints.
+  TRANSLATED: [HE] It enforces reading speed limi...
+
+#4
+  ORIGINAL:   The Queen's speech was broadcast
+across the entire kingdom.
+  TRANSLATED: [HE] The Queen's speech was broadcast
+across the e...
+
+#5
+  ORIGINAL:   Professor Smith explained the concept
+clearly to the students.
+  TRANSLATED: [HE] Professor Smith
+explained the concept...
+
+#6
+  ORIGINAL:   "I believe we can achieve
+anything together," she said.
+  TRANSLATED: [HE] "I believe we can achieve
+anything together," she said.
+
+#7
+  ORIGINAL:   The CEO announced the company's
+new global expansion plans.
+  TRANSLATED: [HE] The CEO announced the company's
+new g...
+
+#8
+  ORIGINAL:   Weather forecasters predict
+sunny skies this weekend.
+  TRANSLATED: [HE] Weather forecasters predict
+su...
+
+#9
+  ORIGINAL:   Scientists discovered a new species
+in the Amazon rainforest.
+  TRANSLATED: [HE] Scientists discovered a new species
+in the Am...
+
+#10
+  ORIGINAL:   The concert was absolutely amazing,
+everyone loved it!
+  TRANSLATED: [HE] The concert was absolutely amazing,
+e...
+
