@@ -10,6 +10,7 @@ interface UseJobReturn {
   error: string | null;
   startJob: (file: File, config: JobConfig) => Promise<void>;
   reset: () => void;
+  refreshResult: () => Promise<void>;
 }
 
 export function useJob(): UseJobReturn {
@@ -74,6 +75,17 @@ export function useJob(): UseJobReturn {
     setIsLoading(false);
   }, []);
 
+  const refreshResult = useCallback(async () => {
+    if (!jobId) return;
+    
+    try {
+      const jobResult = await getJobResult(jobId);
+      setResult(jobResult);
+    } catch (err) {
+      console.error('Error refreshing result:', err);
+    }
+  }, [jobId]);
+
   return {
     jobId,
     status,
@@ -82,5 +94,6 @@ export function useJob(): UseJobReturn {
     error,
     startJob,
     reset,
+    refreshResult,
   };
 }

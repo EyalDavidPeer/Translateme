@@ -39,6 +39,8 @@ from .database import get_repository, init_db
 from .translation_memory import get_translation_memory
 from .job_runner import job_runner
 from .export import export_srt, export_vtt
+from .fix_suggestions import generate_fix_suggestions, apply_fix, calculate_cps, calculate_max_line_length
+from .qc import run_qc_checks
 
 
 app = FastAPI(
@@ -635,6 +637,334 @@ async def get_job_review_status(job_id: str):
         print(f"[WARN] Database lookup failed: {e}")
     
     raise HTTPException(status_code=404, detail="Job not found")
+
+
+# =============================================================================
+# Fix Suggestion Endpoints
+# =============================================================================
+
+@app.get("/api/jobs/{job_id}/suggest-fixes/{cue_index}")
+async def suggest_fixes(job_id: str, cue_index: int):
+    """
+    Get fix suggestions for a specific cue with QC issues.
+    
+    Returns multiple fix options:
+    - Auto-compressed version (AI-powered)
+    - Timing-adjusted version (if slack available)
+    - Split suggestion (if applicable)
+    - Reflow option (for line issues)
+    """
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if not job.qc_report:
+        raise HTTPException(status_code=400, detail="No QC report available")
+    
+    # Find the segment
+    segment = None
+    segment_idx = None
+    for i, seg in enumerate(job.translated_segments):
+        if seg.index == cue_index:
+            segment = seg
+            segment_idx = i
+            break
+    
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Cue {cue_index} not found")
+    
+    # Get next segment for timing calculations
+    next_segment = None
+    if segment_idx is not None and segment_idx + 1 < len(job.translated_segments):
+        next_segment = job.translated_segments[segment_idx + 1]
+    
+    # Get issues for this cue
+    cue_issues = [issue for issue in job.qc_report.issues if issue.cue_index == cue_index]
+    
+    if not cue_issues:
+        return {
+            "cue_index": cue_index,
+            "message": "No QC issues for this cue",
+            "options": []
+        }
+    
+    # Get provider for AI-powered compression
+    provider = job_runner.get_provider()
+    
+    # Generate suggestions
+    suggestions = await generate_fix_suggestions(
+        segment=segment,
+        next_segment=next_segment,
+        issues=cue_issues,
+        constraints=job.request.constraints,
+        target_lang=job.request.target_lang,
+        provider=provider
+    )
+    
+    return {
+        "cue_index": suggestions.cue_index,
+        "original_text": suggestions.original_text,
+        "current_cps": suggestions.current_cps,
+        "current_max_line_length": suggestions.current_max_line_length,
+        "current_line_count": suggestions.current_line_count,
+        "issues": suggestions.issues,
+        "options": suggestions.options,
+        "constraints": suggestions.constraints
+    }
+
+
+@app.patch("/api/jobs/{job_id}/segments/{cue_index}")
+async def apply_segment_fix(
+    job_id: str,
+    cue_index: int,
+    fix_type: str = Form(...),
+    new_text: Optional[str] = Form(default=None),
+    new_start_ms: Optional[int] = Form(default=None),
+    new_end_ms: Optional[int] = Form(default=None)
+):
+    """
+    Apply a fix to a specific segment.
+    
+    Args:
+        job_id: The job ID
+        cue_index: The cue index to fix
+        fix_type: Type of fix (compress, extend_timing, reflow, manual, split_cue)
+        new_text: New text content (for text-based fixes)
+        new_start_ms: New start time (for timing fixes)
+        new_end_ms: New end time (for timing fixes)
+    """
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Find the segment
+    segment = None
+    for seg in job.translated_segments:
+        if seg.index == cue_index:
+            segment = seg
+            break
+    
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Cue {cue_index} not found")
+    
+    # Apply the fix
+    apply_fix(
+        segment=segment,
+        fix_type=fix_type,
+        new_text=new_text,
+        new_start_ms=new_start_ms,
+        new_end_ms=new_end_ms
+    )
+    
+    # Re-run QC on all segments
+    job.qc_report = run_qc_checks(
+        segments=job.translated_segments,
+        constraints=job.request.constraints,
+        use_translated=True
+    )
+    
+    # Update review status if all issues are fixed
+    if job.qc_report.summary.passed:
+        job.review_status = ReviewStatus.AUTO
+    
+    # Calculate new metrics for the fixed segment
+    text = segment.translated_text or segment.text
+    new_cps = calculate_cps(text, segment.duration_ms)
+    new_max_line = calculate_max_line_length(text)
+    
+    return {
+        "status": "ok",
+        "cue_index": cue_index,
+        "fix_applied": fix_type,
+        "new_text": segment.translated_text,
+        "new_start_ms": segment.start_ms,
+        "new_end_ms": segment.end_ms,
+        "new_cps": round(new_cps, 1),
+        "new_max_line_length": new_max_line,
+        "qc_summary": job.qc_report.summary.model_dump()
+    }
+
+
+@app.post("/api/jobs/{job_id}/auto-fix")
+async def batch_auto_fix(
+    job_id: str,
+    issue_type: Optional[str] = Form(default=None),
+    max_fixes: int = Form(default=50)
+):
+    """
+    Automatically apply the best fix to all issues of a specific type.
+    
+    Args:
+        job_id: The job ID
+        issue_type: Type of issues to fix (e.g., "cps_exceeded", "line_too_long")
+                   If None, fixes all issue types
+        max_fixes: Maximum number of fixes to apply (default 50)
+    """
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if not job.qc_report:
+        raise HTTPException(status_code=400, detail="No QC report available")
+    
+    # Filter issues
+    issues_to_fix = job.qc_report.issues
+    if issue_type:
+        issues_to_fix = [i for i in issues_to_fix if i.issue_type.value == issue_type]
+    
+    # Group issues by cue_index
+    issues_by_cue = {}
+    for issue in issues_to_fix:
+        if issue.cue_index not in issues_by_cue:
+            issues_by_cue[issue.cue_index] = []
+        issues_by_cue[issue.cue_index].append(issue)
+    
+    # Get provider for AI fixes
+    provider = job_runner.get_provider()
+    
+    # Apply fixes
+    fixed_count = 0
+    failed_count = 0
+    fixed_cues = []
+    
+    # Build segment lookup
+    segment_map = {seg.index: (i, seg) for i, seg in enumerate(job.translated_segments)}
+    
+    for cue_index, cue_issues in list(issues_by_cue.items())[:max_fixes]:
+        if cue_index not in segment_map:
+            continue
+        
+        seg_idx, segment = segment_map[cue_index]
+        
+        # Get next segment
+        next_segment = None
+        if seg_idx + 1 < len(job.translated_segments):
+            next_segment = job.translated_segments[seg_idx + 1]
+        
+        try:
+            # Generate suggestions
+            suggestions = await generate_fix_suggestions(
+                segment=segment,
+                next_segment=next_segment,
+                issues=cue_issues,
+                constraints=job.request.constraints,
+                target_lang=job.request.target_lang,
+                provider=provider
+            )
+            
+            # Find best applicable option
+            best_option = None
+            for opt in suggestions.options:
+                if opt.get("is_applicable", False):
+                    best_option = opt
+                    break
+            
+            if best_option:
+                # Apply the fix
+                apply_fix(
+                    segment=segment,
+                    fix_type=best_option["fix_type"],
+                    new_text=best_option.get("preview_text"),
+                    new_start_ms=best_option.get("new_start_ms"),
+                    new_end_ms=best_option.get("new_end_ms")
+                )
+                fixed_count += 1
+                fixed_cues.append({
+                    "cue_index": cue_index,
+                    "fix_type": best_option["fix_type"],
+                    "description": best_option["description"]
+                })
+            else:
+                failed_count += 1
+                
+        except Exception as e:
+            print(f"[WARN] Failed to fix cue {cue_index}: {e}")
+            failed_count += 1
+    
+    # Re-run QC
+    job.qc_report = run_qc_checks(
+        segments=job.translated_segments,
+        constraints=job.request.constraints,
+        use_translated=True
+    )
+    
+    # Update review status
+    if job.qc_report.summary.passed:
+        job.review_status = ReviewStatus.AUTO
+    
+    return {
+        "status": "ok",
+        "fixed_count": fixed_count,
+        "failed_count": failed_count,
+        "fixed_cues": fixed_cues,
+        "remaining_issues": job.qc_report.summary.issues_count,
+        "qc_summary": job.qc_report.summary.model_dump()
+    }
+
+
+@app.get("/api/jobs/{job_id}/calculate-metrics")
+async def calculate_segment_metrics(
+    job_id: str,
+    cue_index: int,
+    text: str
+):
+    """
+    Calculate CPS and line metrics for given text in a segment's timing.
+    Used for real-time validation in the frontend editor.
+    """
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Find the segment
+    segment = None
+    for seg in job.translated_segments:
+        if seg.index == cue_index:
+            segment = seg
+            break
+    
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Cue {cue_index} not found")
+    
+    # Calculate metrics
+    cps = calculate_cps(text, segment.duration_ms)
+    max_line_length = calculate_max_line_length(text)
+    line_count = len(text.split('\n'))
+    char_count = len(text.replace('\n', ''))
+    
+    # Check against constraints
+    constraints = job.request.constraints
+    violations = []
+    
+    if cps > constraints.max_cps:
+        violations.append(f"CPS {cps:.1f} exceeds max {constraints.max_cps}")
+    if max_line_length > constraints.max_chars_per_line:
+        violations.append(f"Line length {max_line_length} exceeds max {constraints.max_chars_per_line}")
+    if line_count > constraints.max_lines:
+        violations.append(f"Line count {line_count} exceeds max {constraints.max_lines}")
+    
+    return {
+        "cue_index": cue_index,
+        "text": text,
+        "metrics": {
+            "cps": round(cps, 1),
+            "max_line_length": max_line_length,
+            "line_count": line_count,
+            "char_count": char_count,
+            "duration_ms": segment.duration_ms
+        },
+        "constraints": {
+            "max_cps": constraints.max_cps,
+            "max_chars_per_line": constraints.max_chars_per_line,
+            "max_lines": constraints.max_lines
+        },
+        "is_valid": len(violations) == 0,
+        "violations": violations
+    }
 
 
 if __name__ == "__main__":

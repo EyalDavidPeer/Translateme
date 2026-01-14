@@ -58,3 +58,65 @@ export interface JobConfig {
   glossary: Record<string, string>;
   dry_run: boolean;
 }
+
+// Fix suggestion types
+export interface FixOption {
+  fix_type: 'compress' | 'extend_timing' | 'split_cue' | 'reflow' | 'manual';
+  description: string;
+  preview_text: string;
+  new_start_ms?: number;
+  new_end_ms?: number;
+  resulting_cps?: number;
+  resulting_line_length?: number;
+  confidence: number;
+  is_applicable: boolean;
+  reason?: string;
+}
+
+export interface FixSuggestions {
+  cue_index: number;
+  original_text: string;
+  current_cps: number;
+  current_max_line_length: number;
+  current_line_count: number;
+  issues: string[];
+  options: FixOption[];
+  constraints: {
+    max_cps: number;
+    max_chars_per_line: number;
+    max_lines: number;
+    min_duration_ms: number;
+  };
+}
+
+export interface MetricsResult {
+  cue_index: number;
+  text: string;
+  metrics: {
+    cps: number;
+    max_line_length: number;
+    line_count: number;
+    char_count: number;
+    duration_ms: number;
+  };
+  constraints: {
+    max_cps: number;
+    max_chars_per_line: number;
+    max_lines: number;
+  };
+  is_valid: boolean;
+  violations: string[];
+}
+
+export interface AutoFixResult {
+  status: string;
+  fixed_count: number;
+  failed_count: number;
+  fixed_cues: Array<{
+    cue_index: number;
+    fix_type: string;
+    description: string;
+  }>;
+  remaining_issues: number;
+  qc_summary: QCSummary;
+}

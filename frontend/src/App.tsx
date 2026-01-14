@@ -19,7 +19,7 @@ function App() {
   });
   const [dryRun, setDryRun] = useState(false);
 
-  const { jobId, status, result, isLoading, error, startJob, reset } = useJob();
+  const { jobId, status, result, isLoading, error, startJob, reset, refreshResult } = useJob();
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -127,7 +127,11 @@ function App() {
                 <SubtitlePreview segments={result.segments} />
               </div>
               <div className="results-right">
-                <QCReport report={result.qc_report} />
+                <QCReport 
+                  report={result.qc_report} 
+                  jobId={jobId!}
+                  onReportUpdated={refreshResult}
+                />
                 {jobId && <DownloadPanel jobId={jobId} />}
               </div>
             </div>

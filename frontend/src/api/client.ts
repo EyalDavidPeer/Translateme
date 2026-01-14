@@ -1,4 +1,4 @@
-import type { JobStatus, JobResult, JobConfig } from '../types';
+import type { JobStatus, JobResult, JobConfig, FixSuggestions, MetricsResult, AutoFixResult, QCSummary } from '../types';
 
 const API_BASE = '/api';
 
@@ -59,4 +59,93 @@ export function getDownloadUrl(jobId: string, format: 'srt' | 'vtt'): string {
 
 export function getQCReportUrl(jobId: string): string {
   return `${API_BASE}/jobs/${jobId}/qc-report`;
+}
+
+// Fix suggestion APIs
+export async function getFixSuggestions(jobId: string, cueIndex: number): Promise<FixSuggestions> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/suggest-fixes/${cueIndex}`);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get fix suggestions');
+  }
+
+  return response.json();
+}
+
+export async function applyFix(
+  jobId: string,
+  cueIndex: number,
+  fixType: string,
+  newText?: string,
+  newStartMs?: number,
+  newEndMs?: number
+): Promise<{
+  status: string;
+  cue_index: number;
+  fix_applied: string;
+  new_text: string;
+  new_cps: number;
+  new_max_line_length: number;
+  qc_summary: QCSummary;
+}> {
+  const formData = new FormData();
+  formData.append('fix_type', fixType);
+  if (newText !== undefined) formData.append('new_text', newText);
+  if (newStartMs !== undefined) formData.append('new_start_ms', newStartMs.toString());
+  if (newEndMs !== undefined) formData.append('new_end_ms', newEndMs.toString());
+
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/segments/${cueIndex}`, {
+    method: 'PATCH',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to apply fix');
+  }
+
+  return response.json();
+}
+
+export async function autoFixAll(
+  jobId: string,
+  issueType?: string,
+  maxFixes: number = 50
+): Promise<AutoFixResult> {
+  const formData = new FormData();
+  if (issueType) formData.append('issue_type', issueType);
+  formData.append('max_fixes', maxFixes.toString());
+
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/auto-fix`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to auto-fix');
+  }
+
+  return response.json();
+}
+
+export async function calculateMetrics(
+  jobId: string,
+  cueIndex: number,
+  text: string
+): Promise<MetricsResult> {
+  const params = new URLSearchParams({
+    cue_index: cueIndex.toString(),
+    text: text,
+  });
+
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/calculate-metrics?${params}`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to calculate metrics');
+  }
+
+  return response.json();
 }
