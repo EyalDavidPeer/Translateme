@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { QCReport as QCReportType, QCIssue, SubtitleSegment } from '../types';
 import { IssueResolver, BatchAutoFix } from './IssueResolver';
+import { BatchGenderSelector } from './GenderToggle';
 
 interface QCReportProps {
   report: QCReportType;
@@ -116,6 +117,15 @@ export function QCReport({ report, jobId, onReportUpdated, segments }: QCReportP
           OK
         </span>
       </div>
+
+      {/* Gender ambiguity batch selector */}
+      {summary.by_type['gender_ambiguous'] && summary.by_type['gender_ambiguous'] > 0 && (
+        <BatchGenderSelector
+          jobId={jobId}
+          ambiguousCount={summary.by_type['gender_ambiguous']}
+          onBatchApplied={handleFixApplied}
+        />
+      )}
 
       {/* Batch auto-fix buttons */}
       {!summary.passed && Object.keys(issuesByType).length > 0 && (

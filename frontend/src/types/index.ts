@@ -1,3 +1,11 @@
+export type GenderForm = 'masculine' | 'feminine' | 'neutral' | 'unknown';
+
+export interface GenderAlternative {
+  gender: GenderForm;
+  text: string;
+  confidence: number;
+}
+
 export interface SubtitleSegment {
   index: number;
   start_ms: number;
@@ -5,6 +13,10 @@ export interface SubtitleSegment {
   text: string;
   translated_text: string | null;
   qc_flags: string[];
+  // Gender-related fields
+  gender_alternatives?: GenderAlternative[];
+  active_gender?: GenderForm;
+  gender_confidence?: number;
 }
 
 export interface JobConstraints {
@@ -118,5 +130,30 @@ export interface AutoFixResult {
     description: string;
   }>;
   remaining_issues: number;
+  qc_summary: QCSummary;
+}
+
+// Gender API types
+export interface GenderAlternativesResponse {
+  cue_index: number;
+  current_text: string;
+  active_gender: GenderForm;
+  confidence: number;
+  alternatives: GenderAlternative[];
+  has_alternatives: boolean;
+}
+
+export interface SetGenderResponse {
+  status: string;
+  cue_index: number;
+  new_gender: GenderForm;
+  new_text: string;
+  qc_summary: QCSummary;
+}
+
+export interface BatchSetGenderResponse {
+  status: string;
+  updated_count: number;
+  gender: GenderForm;
   qc_summary: QCSummary;
 }

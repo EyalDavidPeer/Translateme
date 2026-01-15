@@ -967,6 +967,203 @@ async def calculate_segment_metrics(
     }
 
 
+# =============================================================================
+# Gender Toggle Endpoints
+# =============================================================================
+
+@app.get("/api/jobs/{job_id}/segments/{cue_index}/gender-alternatives")
+async def get_gender_alternatives(job_id: str, cue_index: int):
+    """
+    Get gender alternatives for a specific segment.
+    
+    Returns available gender forms and the currently selected one.
+    """
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Find the segment
+    segment = None
+    for seg in job.translated_segments:
+        if seg.index == cue_index:
+            segment = seg
+            break
+    
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Cue {cue_index} not found")
+    
+    return {
+        "cue_index": cue_index,
+        "current_text": segment.translated_text,
+        "active_gender": segment.active_gender.value,
+        "confidence": segment.gender_confidence,
+        "alternatives": [
+            {
+                "gender": alt.gender.value,
+                "text": alt.text,
+                "confidence": alt.confidence
+            }
+            for alt in segment.gender_alternatives
+        ],
+        "has_alternatives": len(segment.gender_alternatives) > 1
+    }
+
+
+@app.patch("/api/jobs/{job_id}/segments/{cue_index}/gender")
+async def set_segment_gender(
+    job_id: str,
+    cue_index: int,
+    gender: str = Form(...)
+):
+    """
+    Set the grammatical gender for a segment's translation.
+    
+    Args:
+        job_id: The job ID
+        cue_index: The cue index
+        gender: The gender to set ('masculine' or 'feminine')
+    """
+    from .models import GenderForm
+    
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Find the segment
+    segment = None
+    for seg in job.translated_segments:
+        if seg.index == cue_index:
+            segment = seg
+            break
+    
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Cue {cue_index} not found")
+    
+    # Validate gender
+    try:
+        new_gender = GenderForm(gender.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid gender: {gender}. Must be 'masculine', 'feminine', 'neutral', or 'unknown'"
+        )
+    
+    # Find the alternative with matching gender
+    matching_alt = None
+    for alt in segment.gender_alternatives:
+        if alt.gender == new_gender:
+            matching_alt = alt
+            break
+    
+    if not matching_alt and segment.gender_alternatives:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No {gender} alternative available for this segment"
+        )
+    
+    # Update the segment
+    if matching_alt:
+        segment.translated_text = matching_alt.text
+        segment.active_gender = new_gender
+        segment.gender_confidence = 1.0  # User made explicit choice
+        
+        # Add flag indicating manual gender selection
+        if "GENDER_SET" not in segment.qc_flags:
+            segment.qc_flags.append("GENDER_SET")
+    
+    # Re-run QC
+    job.qc_report = run_qc_checks(
+        segments=job.translated_segments,
+        constraints=job.request.constraints,
+        use_translated=True
+    )
+    
+    return {
+        "status": "ok",
+        "cue_index": cue_index,
+        "new_gender": new_gender.value,
+        "new_text": segment.translated_text,
+        "qc_summary": job.qc_report.summary.model_dump()
+    }
+
+
+@app.post("/api/jobs/{job_id}/batch-set-gender")
+async def batch_set_gender(
+    job_id: str,
+    gender: str = Form(...),
+    cue_indices: Optional[str] = Form(default=None)
+):
+    """
+    Set gender for multiple segments at once.
+    
+    Args:
+        job_id: The job ID
+        gender: The gender to set ('masculine' or 'feminine')
+        cue_indices: Comma-separated list of cue indices. If None, applies to all ambiguous segments.
+    """
+    from .models import GenderForm
+    
+    job = await job_runner.get_job(job_id)
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Validate gender
+    try:
+        new_gender = GenderForm(gender.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid gender: {gender}. Must be 'masculine', 'feminine', 'neutral', or 'unknown'"
+        )
+    
+    # Parse cue indices
+    target_indices = None
+    if cue_indices:
+        try:
+            target_indices = set(int(i.strip()) for i in cue_indices.split(','))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid cue_indices format")
+    
+    # Apply gender to segments
+    updated_count = 0
+    for segment in job.translated_segments:
+        # Skip if specific indices provided and this isn't one of them
+        if target_indices and segment.index not in target_indices:
+            continue
+        
+        # Skip if no alternatives
+        if not segment.gender_alternatives or len(segment.gender_alternatives) < 2:
+            continue
+        
+        # Find matching alternative
+        for alt in segment.gender_alternatives:
+            if alt.gender == new_gender:
+                segment.translated_text = alt.text
+                segment.active_gender = new_gender
+                segment.gender_confidence = 1.0
+                if "GENDER_SET" not in segment.qc_flags:
+                    segment.qc_flags.append("GENDER_SET")
+                updated_count += 1
+                break
+    
+    # Re-run QC
+    job.qc_report = run_qc_checks(
+        segments=job.translated_segments,
+        constraints=job.request.constraints,
+        use_translated=True
+    )
+    
+    return {
+        "status": "ok",
+        "updated_count": updated_count,
+        "gender": new_gender.value,
+        "qc_summary": job.qc_report.summary.model_dump()
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

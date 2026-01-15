@@ -1,7 +1,9 @@
 import type { SubtitleSegment } from '../types';
+import { GenderIndicator } from './GenderToggle';
 
 interface SubtitlePreviewProps {
   segments: SubtitleSegment[];
+  onGenderClick?: (segment: SubtitleSegment) => void;
 }
 
 function formatTime(ms: number): string {
@@ -82,7 +84,7 @@ function formatFlagLabel(flag: string): string {
   return flag.replace(/_/g, ' ');
 }
 
-export function SubtitlePreview({ segments }: SubtitlePreviewProps) {
+export function SubtitlePreview({ segments, onGenderClick }: SubtitlePreviewProps) {
   if (segments.length === 0) {
     return (
       <div className="preview-empty">
@@ -90,6 +92,10 @@ export function SubtitlePreview({ segments }: SubtitlePreviewProps) {
       </div>
     );
   }
+
+  const hasAnyGenderAlternatives = segments.some(
+    seg => seg.gender_alternatives && seg.gender_alternatives.length > 1
+  );
 
   return (
     <div className="subtitle-preview">
@@ -100,41 +106,58 @@ export function SubtitlePreview({ segments }: SubtitlePreviewProps) {
             <th className="col-time">Time</th>
             <th className="col-original">Original</th>
             <th className="col-translated">Translated</th>
+            {hasAnyGenderAlternatives && <th className="col-gender">Gender</th>}
             <th className="col-qc">QC</th>
           </tr>
         </thead>
         <tbody>
-          {segments.map((segment) => (
-            <tr key={segment.index} className={getQCFlagClass(segment.qc_flags)}>
-              <td className="col-index">{segment.index}</td>
-              <td className="col-time">
-                <span className="time-range">
-                  {formatTime(segment.start_ms)}
-                  <br />
-                  {formatTime(segment.end_ms)}
-                </span>
-              </td>
-              <td className="col-original">
-                <pre>{segment.text}</pre>
-              </td>
-              <td className="col-translated">
-                <pre dir="auto">{segment.translated_text || '—'}</pre>
-              </td>
-              <td className="col-qc">
-                {segment.qc_flags.length > 0 ? (
-                  <ul className="qc-flags">
-                    {segment.qc_flags.map((flag, i) => (
-                      <li key={i} className={getFlagBadgeClass(flag)}>
-                        {formatFlagLabel(flag)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <span className="qc-ok">✓</span>
+          {segments.map((segment) => {
+            const hasGenderAlts = segment.gender_alternatives && segment.gender_alternatives.length > 1;
+            
+            return (
+              <tr key={segment.index} className={getQCFlagClass(segment.qc_flags)}>
+                <td className="col-index">{segment.index}</td>
+                <td className="col-time">
+                  <span className="time-range">
+                    {formatTime(segment.start_ms)}
+                    <br />
+                    {formatTime(segment.end_ms)}
+                  </span>
+                </td>
+                <td className="col-original">
+                  <pre>{segment.text}</pre>
+                </td>
+                <td className="col-translated">
+                  <pre dir="auto">{segment.translated_text || '—'}</pre>
+                </td>
+                {hasAnyGenderAlternatives && (
+                  <td className="col-gender">
+                    {hasGenderAlts && (
+                      <GenderIndicator
+                        activeGender={segment.active_gender || 'unknown'}
+                        confidence={segment.gender_confidence || 1}
+                        hasAlternatives={true}
+                        onClick={onGenderClick ? () => onGenderClick(segment) : undefined}
+                      />
+                    )}
+                  </td>
                 )}
-              </td>
-            </tr>
-          ))}
+                <td className="col-qc">
+                  {segment.qc_flags.length > 0 ? (
+                    <ul className="qc-flags">
+                      {segment.qc_flags.map((flag, i) => (
+                        <li key={i} className={getFlagBadgeClass(flag)}>
+                          {formatFlagLabel(flag)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="qc-ok">✓</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

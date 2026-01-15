@@ -1,4 +1,16 @@
-import type { JobStatus, JobResult, JobConfig, FixSuggestions, MetricsResult, AutoFixResult, QCSummary } from '../types';
+import type { 
+  JobStatus, 
+  JobResult, 
+  JobConfig, 
+  FixSuggestions, 
+  MetricsResult, 
+  AutoFixResult, 
+  QCSummary,
+  GenderAlternativesResponse,
+  SetGenderResponse,
+  BatchSetGenderResponse,
+  GenderForm
+} from '../types';
 
 const API_BASE = '/api';
 
@@ -145,6 +157,66 @@ export async function calculateMetrics(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to calculate metrics');
+  }
+
+  return response.json();
+}
+
+// Gender API functions
+export async function getGenderAlternatives(
+  jobId: string,
+  cueIndex: number
+): Promise<GenderAlternativesResponse> {
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/segments/${cueIndex}/gender-alternatives`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get gender alternatives');
+  }
+
+  return response.json();
+}
+
+export async function setSegmentGender(
+  jobId: string,
+  cueIndex: number,
+  gender: GenderForm
+): Promise<SetGenderResponse> {
+  const formData = new FormData();
+  formData.append('gender', gender);
+
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/segments/${cueIndex}/gender`, {
+    method: 'PATCH',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to set gender');
+  }
+
+  return response.json();
+}
+
+export async function batchSetGender(
+  jobId: string,
+  gender: GenderForm,
+  cueIndices?: number[]
+): Promise<BatchSetGenderResponse> {
+  const formData = new FormData();
+  formData.append('gender', gender);
+  if (cueIndices) {
+    formData.append('cue_indices', cueIndices.join(','));
+  }
+
+  const response = await fetch(`${API_BASE}/jobs/${jobId}/batch-set-gender`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to batch set gender');
   }
 
   return response.json();
