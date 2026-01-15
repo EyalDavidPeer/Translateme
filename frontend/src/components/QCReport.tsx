@@ -1,17 +1,42 @@
 import { useState } from 'react';
-import type { QCReport as QCReportType, QCIssue } from '../types';
+import type { QCReport as QCReportType, QCIssue, SubtitleSegment } from '../types';
 import { IssueResolver, BatchAutoFix } from './IssueResolver';
 
 interface QCReportProps {
   report: QCReportType;
   jobId: string;
   onReportUpdated?: () => void;
+  segments?: SubtitleSegment[];
 }
 
-export function QCReport({ report, jobId, onReportUpdated }: QCReportProps) {
+// Count auto-fixed and manually fixed cues from segments
+function countFixedCues(segments: SubtitleSegment[] | undefined): { autoFixed: number; manualFixed: number } {
+  if (!segments) return { autoFixed: 0, manualFixed: 0 };
+  
+  let autoFixed = 0;
+  let manualFixed = 0;
+  
+  for (const seg of segments) {
+    const hasAutoFix = seg.qc_flags.some(f => f.startsWith('CONFORMED:'));
+    const hasManualFix = seg.qc_flags.some(f => f.startsWith('FIXED:'));
+    const hasError = seg.qc_flags.some(f => 
+      !f.startsWith('CONFORMED:') && !f.startsWith('FIXED:') && f !== 'UNFIXABLE'
+    );
+    
+    // Only count as fixed if it has a fix flag but no remaining errors
+    if (hasAutoFix && !hasError) autoFixed++;
+    if (hasManualFix && !hasError) manualFixed++;
+  }
+  
+  return { autoFixed, manualFixed };
+}
+
+export function QCReport({ report, jobId, onReportUpdated, segments }: QCReportProps) {
   const { summary, issues } = report;
   const [selectedIssue, setSelectedIssue] = useState<QCIssue | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
+  
+  const fixedCounts = countFixedCues(segments);
 
   const handleFixApplied = () => {
     setSelectedIssue(null);
@@ -63,7 +88,33 @@ export function QCReport({ report, jobId, onReportUpdated }: QCReportProps) {
             <span className="stat-value">{summary.warnings_count}</span>
             <span className="stat-label">Warnings</span>
           </div>
+          {(fixedCounts.autoFixed > 0 || fixedCounts.manualFixed > 0) && (
+            <div className="stat fixed">
+              <span className="stat-value">{fixedCounts.autoFixed + fixedCounts.manualFixed}</span>
+              <span className="stat-label">Auto-Fixed</span>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Legend */}
+      <div className="qc-legend">
+        <span className="legend-item">
+          <span className="legend-badge error"></span>
+          Needs Fix
+        </span>
+        <span className="legend-item">
+          <span className="legend-badge auto-fixed"></span>
+          Auto-Fixed
+        </span>
+        <span className="legend-item">
+          <span className="legend-badge manual-fixed"></span>
+          Manually Fixed
+        </span>
+        <span className="legend-item">
+          <span className="legend-badge ok"></span>
+          OK
+        </span>
       </div>
 
       {/* Batch auto-fix buttons */}

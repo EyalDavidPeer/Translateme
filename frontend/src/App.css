@@ -397,9 +397,17 @@ body {
   background: var(--warning-dim);
 }
 
+.subtitle-preview tr.qc-auto-fixed {
+  background: rgba(0, 217, 165, 0.08);
+}
+
+.subtitle-preview tr.qc-manual-fixed {
+  background: rgba(100, 149, 237, 0.1);
+}
+
 .col-index { width: 50px; }
 .col-time { width: 120px; }
-.col-qc { width: 150px; }
+.col-qc { width: 180px; }
 
 .time-range {
   font-family: var(--font-mono);
@@ -417,16 +425,41 @@ body {
 
 .qc-flags {
   list-style: none;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .qc-flags li {
-  background: var(--error);
-  color: var(--bg-primary);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  margin-bottom: 0.25rem;
   display: inline-block;
+  font-weight: 500;
+}
+
+/* Error flags - red */
+.qc-flags li.flag-error {
+  background: var(--error);
+  color: var(--bg-primary);
+}
+
+/* Auto-fixed flags - green */
+.qc-flags li.flag-auto-fixed {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+/* Manually fixed flags - blue */
+.qc-flags li.flag-manual-fixed {
+  background: #6495ED;
+  color: var(--bg-primary);
+}
+
+/* Unfixable flags - dark red/maroon */
+.qc-flags li.flag-unfixable {
+  background: #8B0000;
+  color: white;
 }
 
 .qc-ok {
@@ -484,7 +517,7 @@ body {
 
 .summary-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
 }
 
@@ -511,6 +544,52 @@ body {
 
 .stat.warnings .stat-value {
   color: var(--warning);
+}
+
+.stat.fixed .stat-value {
+  color: var(--accent);
+}
+
+/* QC Legend */
+.qc-legend {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-badge {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.legend-badge.error {
+  background: var(--error);
+}
+
+.legend-badge.auto-fixed {
+  background: var(--accent);
+}
+
+.legend-badge.manual-fixed {
+  background: #6495ED;
+}
+
+.legend-badge.ok {
+  background: transparent;
+  border: 2px solid var(--accent);
 }
 
 .issues-by-type h4,

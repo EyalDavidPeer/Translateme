@@ -131,6 +131,7 @@ function App() {
                   report={result.qc_report} 
                   jobId={jobId!}
                   onReportUpdated={refreshResult}
+                  segments={result.segments}
                 />
                 {jobId && <DownloadPanel jobId={jobId} />}
               </div>

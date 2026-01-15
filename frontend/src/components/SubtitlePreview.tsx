@@ -17,14 +17,69 @@ function formatTime(ms: number): string {
   return `${hh}:${mm}:${ss}.${mmm}`;
 }
 
+// Categorize flags into errors, auto-fixed, and manual fixes
+function categorizeFlags(flags: string[]): { errors: string[]; autoFixed: string[]; manualFixed: string[] } {
+  const errors: string[] = [];
+  const autoFixed: string[] = [];
+  const manualFixed: string[] = [];
+  
+  for (const flag of flags) {
+    if (flag.startsWith('CONFORMED:')) {
+      autoFixed.push(flag);
+    } else if (flag.startsWith('FIXED:')) {
+      manualFixed.push(flag);
+    } else if (flag !== 'UNFIXABLE') {
+      // Actual errors: cps_exceeded, line_too_long, too_many_lines, etc.
+      errors.push(flag);
+    } else {
+      errors.push(flag); // UNFIXABLE is still an error
+    }
+  }
+  
+  return { errors, autoFixed, manualFixed };
+}
+
 function getQCFlagClass(flags: string[]): string {
-  if (flags.some(f => f.includes('exceeded') || f.includes('too_long') || f.includes('too_many'))) {
+  const { errors, autoFixed, manualFixed } = categorizeFlags(flags);
+  
+  // If there are actual errors, show as error
+  if (errors.length > 0) {
     return 'qc-error';
   }
-  if (flags.length > 0) {
-    return 'qc-warning';
+  // If only auto-fixed, show as success
+  if (autoFixed.length > 0) {
+    return 'qc-auto-fixed';
+  }
+  // If manually fixed, show as fixed
+  if (manualFixed.length > 0) {
+    return 'qc-manual-fixed';
   }
   return '';
+}
+
+function getFlagBadgeClass(flag: string): string {
+  if (flag.startsWith('CONFORMED:')) {
+    return 'flag-auto-fixed';
+  }
+  if (flag.startsWith('FIXED:')) {
+    return 'flag-manual-fixed';
+  }
+  if (flag === 'UNFIXABLE') {
+    return 'flag-unfixable';
+  }
+  return 'flag-error';
+}
+
+function formatFlagLabel(flag: string): string {
+  if (flag.startsWith('CONFORMED:')) {
+    const action = flag.replace('CONFORMED:', '').toLowerCase();
+    return `✓ Auto: ${action}`;
+  }
+  if (flag.startsWith('FIXED:')) {
+    const action = flag.replace('FIXED:', '').toLowerCase();
+    return `✓ Fixed: ${action}`;
+  }
+  return flag.replace(/_/g, ' ');
 }
 
 export function SubtitlePreview({ segments }: SubtitlePreviewProps) {
@@ -69,7 +124,9 @@ export function SubtitlePreview({ segments }: SubtitlePreviewProps) {
                 {segment.qc_flags.length > 0 ? (
                   <ul className="qc-flags">
                     {segment.qc_flags.map((flag, i) => (
-                      <li key={i}>{flag.replace(/_/g, ' ')}</li>
+                      <li key={i} className={getFlagBadgeClass(flag)}>
+                        {formatFlagLabel(flag)}
+                      </li>
                     ))}
                   </ul>
                 ) : (
