@@ -27,22 +27,6 @@ class QCIssueType(str, Enum):
     EMPTY_CUE = "empty_cue"
     OVERLAP = "overlap"
     SHORT_DURATION = "short_duration"
-    GENDER_AMBIGUOUS = "gender_ambiguous"
-
-
-class GenderForm(str, Enum):
-    """Grammatical gender forms for translations."""
-    MASCULINE = "masculine"
-    FEMININE = "feminine"
-    NEUTRAL = "neutral"  # For languages/contexts without gender
-    UNKNOWN = "unknown"  # Gender couldn't be determined
-
-
-class GenderAlternative(BaseModel):
-    """Alternative translation with different grammatical gender."""
-    gender: GenderForm = Field(..., description="The grammatical gender of this translation")
-    text: str = Field(..., description="The translated text in this gender form")
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Confidence score for this being correct")
 
 
 class QCIssueSeverity(str, Enum):
@@ -75,21 +59,6 @@ class SubtitleSegment(BaseModel):
     text: str = Field(..., description="Original subtitle text")
     translated_text: Optional[str] = Field(default=None, description="Translated text")
     qc_flags: list[str] = Field(default_factory=list, description="QC issue flags for this cue")
-    # Gender-related fields
-    gender_alternatives: list[GenderAlternative] = Field(
-        default_factory=list, 
-        description="Alternative translations with different grammatical genders"
-    )
-    active_gender: GenderForm = Field(
-        default=GenderForm.UNKNOWN, 
-        description="Currently selected grammatical gender"
-    )
-    gender_confidence: float = Field(
-        default=1.0, 
-        ge=0.0, 
-        le=1.0, 
-        description="Confidence in the current gender selection (1.0 = certain, 0.5 = ambiguous)"
-    )
 
     @property
     def duration_ms(self) -> int:

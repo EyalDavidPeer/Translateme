@@ -211,39 +211,6 @@ def check_short_duration(
     return None
 
 
-def check_gender_ambiguity(
-    segment: SubtitleSegment,
-    confidence_threshold: float = 0.7
-) -> Optional[QCIssue]:
-    """
-    Check if a segment has ambiguous grammatical gender.
-    
-    Args:
-        segment: The subtitle segment to check
-        confidence_threshold: Below this confidence level, flag as ambiguous
-        
-    Returns:
-        QCIssue if gender is ambiguous, None otherwise
-    """
-    # Only flag if there are gender alternatives and confidence is low
-    if segment.gender_alternatives and len(segment.gender_alternatives) > 1:
-        if segment.gender_confidence < confidence_threshold:
-            # Get the alternative genders available
-            genders = [alt.gender.value for alt in segment.gender_alternatives]
-            gender_str = "/".join(genders)
-            
-            return QCIssue(
-                cue_index=segment.index,
-                issue_type=QCIssueType.GENDER_AMBIGUOUS,
-                severity=QCIssueSeverity.WARNING,
-                message=f"Gender uncertain ({int(segment.gender_confidence * 100)}% confidence) - alternatives: {gender_str}",
-                value=segment.gender_confidence,
-                threshold=confidence_threshold
-            )
-    
-    return None
-
-
 def run_qc_checks(
     segments: List[SubtitleSegment],
     constraints: JobConstraints,
@@ -288,11 +255,6 @@ def run_qc_checks(
         
         # Check short duration
         issue = check_short_duration(segment, constraints.min_duration_ms)
-        if issue:
-            issues.append(issue)
-        
-        # Check gender ambiguity
-        issue = check_gender_ambiguity(segment)
         if issue:
             issues.append(issue)
         
